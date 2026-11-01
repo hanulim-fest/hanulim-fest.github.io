@@ -19,6 +19,24 @@ const rowEnd = (list, i) => list[i].e || (list[i + 1] ? list[i + 1].s : addHour(
 // 지금 진행 중인 일정들 (겹치는 시간이 있으면 여러 개)
 const nowRows = (list, t = nowHM()) => list.map((r, i) => ({ r, i })).filter(({ r, i }) => r.s <= t && t < rowEnd(list, i));
 const myTask = (r, me) => me && !me.guest ? (me.grade === 1 ? r.g1 : me.grade === 2 ? r.g2 : "") : "";
+// 확인·알림 창 (브라우저 기본 창 대신 화면 안에 띄움: 일부 앱 속 브라우저는 기본 창을 막음)
+function dialogBox(msg, withCancel) {
+  return new Promise(done => {
+    const wrap = document.createElement("div"); wrap.className = "dlg"; wrap.setAttribute("role", "dialog"); wrap.setAttribute("aria-modal", "true");
+    const box = document.createElement("div"); box.className = "dlg-box";
+    const p = document.createElement("p"); p.textContent = msg;
+    const row = document.createElement("div"); row.className = "dlg-btns";
+    const ok = document.createElement("button"); ok.className = "primary dlg-ok"; ok.textContent = "확인";
+    const finish_ = v => { wrap.remove(); document.removeEventListener("keydown", key); done(v); };
+    const key = e => { if (e.key === "Escape") finish_(false); };
+    ok.addEventListener("click", () => finish_(true));
+    if (withCancel) { const no = document.createElement("button"); no.className = "secondary dlg-no"; no.textContent = "취소"; no.addEventListener("click", () => finish_(false)); row.append(no); }
+    row.append(ok); box.append(p, row); wrap.append(box); document.body.appendChild(wrap);
+    document.addEventListener("keydown", key); ok.focus();
+  });
+}
+const ask = msg => dialogBox(msg, true);
+const say = msg => { dialogBox(msg, false); };
 // 사진 Blob → 화면 주소. 화면이 바뀔 때마다 이전 주소를 정리해 메모리를 아낌
 let blobUrls = [];
 const blobUrl = b => { const u = URL.createObjectURL(b); blobUrls.push(u); return u; };
@@ -79,9 +97,9 @@ function act(id, fn) {
 }
 function onEnter(inputId, buttonId) { const i = $(inputId); if (i) i.addEventListener("keydown", e => { if (e.key === "Enter") $(buttonId)?.click(); }); }
 function handleError(err) {
-  if (err && err.code === "denied") { alert(err.message); go(err.scope === "student" ? "#/" : "#/admin"); }
-  else if (err && (err.code === "network" || err.code === "server")) { alert(err.message); }
-  else { console.error(err); alert("문제가 생겼어요. 다시 해보세요."); }
+  if (err && err.code === "denied") { say(err.message); go(err.scope === "student" ? "#/" : "#/admin"); }
+  else if (err && (err.code === "network" || err.code === "server")) { say(err.message); }
+  else { console.error(err); say("문제가 생겼어요. 다시 해보세요."); }
 }
 
 let renderSeq = 0;
@@ -111,7 +129,7 @@ window.addEventListener("storage", e => {
   if (e.key && !e.key.startsWith("qdp-")) return;
   const a = document.activeElement;
   if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;
-  if (document.querySelector(".lightbox, .keypad") || location.hash.startsWith("#/admin/settings")) return;
+  if (document.querySelector(".lightbox, .keypad, .dlg") || location.hash.startsWith("#/admin/settings")) return;
   render();
 });
 
@@ -167,7 +185,7 @@ async function login(note, mode = "student") {
     if (r.error) $("err").textContent = r.error;
   });
   act("guestBtn", async () => {
-    if (!confirm("학교 학생은 꼭 학교 구글 계정으로 로그인해 주세요.\n외부 방문객이라면 확인을 눌러주세요.")) return;
+    if (!(await ask("학교 학생은 꼭 학교 구글 계정으로 로그인해 주세요.\n외부 방문객이라면 확인을 눌러주세요."))) return;
     const r = await Store.loginGuest();
     if (r.error) { $("err").textContent = r.error; return; }
     afterLogin();
@@ -562,8 +580,8 @@ async function cPhotos(el, club) {
     b.appendChild(img); b.addEventListener("click", () => showFull(p, club.name));
     const del = document.createElement("button"); del.type = "button"; del.className = "link small danger-text"; del.textContent = "지우기";
     del.addEventListener("click", async () => {
-      if (!confirm("이 사진을 지울까요?")) return;
-      try { const r = await Store.deleteClubPhoto(club.id, p.id); if (r.error) alert(r.error); render(); } catch (e) { handleError(e); }
+      if (!(await ask("이 사진을 지울까요?"))) return;
+      try { const r = await Store.deleteClubPhoto(club.id, p.id); if (r.error) say(r.error); render(); } catch (e) { handleError(e); }
     });
     cell.append(b, del); grid.appendChild(cell);
   });
@@ -702,9 +720,9 @@ async function aProxy(el, me) {
       ${!u.rewardAt && n >= s.required ? `<button class="primary" id="pReward">보상 지급 기록하기</button>` : ""}`;
     $("pResult").querySelectorAll("input[data-club]").forEach(cb => cb.addEventListener("change", async () => {
       cb.disabled = true;
-      try { const r = await Store.proxyStamp(u.uid, cb.dataset.club, cb.checked); if (r.error) alert(r.error); await show(r.user || u); } catch (e) { handleError(e); }
+      try { const r = await Store.proxyStamp(u.uid, cb.dataset.club, cb.checked); if (r.error) say(r.error); await show(r.user || u); } catch (e) { handleError(e); }
     }));
-    act("pReward", async () => { if (!confirm(`${u.name} 학생에게 보상을 지급했다고 기록할까요?`)) return; const r = await Store.proxyReward(u.uid); if (r.error) alert(r.error); else await show(r.user); });
+    act("pReward", async () => { if (!(await ask(`${u.name} 학생에게 보상을 지급했다고 기록할까요?`))) return; const r = await Store.proxyReward(u.uid); if (r.error) say(r.error); else await show(r.user); });
     act("pUnlock", async () => { const r = await Store.unlockStudentPin(u.uid); if (r.user) await show(r.user); });
   };
   act("pFind", async () => {
@@ -828,7 +846,7 @@ async function aSettings(el) {
     if (/\uFFFD/.test(text)) { try { text = new TextDecoder("euc-kr").decode(await f.arrayBuffer()); } catch {} }
     const rows = parseCsv(text.replace(/^\uFEFF/, "")).map(r => r.map(x => x.trim())).filter(r => /^[1-3]\d{4}$/.test(r[0]));
     if (!rows.length) return msg.textContent = "학번(5자리)으로 시작하는 줄이 없어요. 파일 형식을 확인하세요.";
-    if (!confirm(`${rows.length}명의 명단으로 바꿀까요? 기존 명단은 지워져요.`)) return;
+    if (!(await ask(`${rows.length}명의 명단으로 바꿀까요? 기존 명단은 지워져요.`))) return;
     msg.textContent = "올리는 중…";
     try {
       const r = await Store.uploadRoster(rows.map(r => [r[0], r[1] || "", r[2] || ""]));
@@ -851,10 +869,10 @@ async function aSettings(el) {
     readRows(); $("schMsg").textContent = "";
     const r = await Store.setSchedule(rows);
     if (r.error) return $("schMsg").textContent = r.error;
-    rows = await Store.schedule(); drawRows(); $("schMsg").textContent = ""; alert("일정표를 저장했어요.");
+    rows = await Store.schedule(); drawRows(); $("schMsg").textContent = ""; say("일정표를 저장했어요.");
   });
   act("schReset", async () => {
-    if (!confirm("일정표를 처음 기본 일정으로 되돌릴까요?")) return;
+    if (!(await ask("일정표를 처음 기본 일정으로 되돌릴까요?"))) return;
     await Store.setSchedule(null); rows = await Store.schedule(); drawRows();
   });
   act("fsave", async () => {
@@ -864,8 +882,8 @@ async function aSettings(el) {
   act("saveReq", async () => { const r = await Store.updateRequired($("req").value); $("reqMsg").textContent = r.error || "저장했어요."; });
   act("addC", async () => { const r = await Store.addClub($("cn").value, $("cl").value, $("cf").value); if (r.error) return $("cMsg").textContent = r.error; render(); });
   el.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", async () => {
-    if (!confirm(`'${b.dataset.name}' 동아리를 삭제할까요?\n이 동아리 QR은 더 이상 스탬프가 찍히지 않아요.`)) return;
-    try { const r = await Store.removeClub(b.dataset.del); if (r.error) alert(r.error); render(); } catch (e) { handleError(e); }
+    if (!(await ask(`'${b.dataset.name}' 동아리를 삭제할까요?\n이 동아리 QR은 더 이상 스탬프가 찍히지 않아요.`))) return;
+    try { const r = await Store.removeClub(b.dataset.del); if (r.error) say(r.error); render(); } catch (e) { handleError(e); }
   }));
 }
 
@@ -896,14 +914,14 @@ async function aData(el) {
     if (!check()) return;
     const r = await Store.wipeStudents($("wpw").value, $("wRoster").checked); $("wpw").value = "";
     if (r.error) return $("werr").textContent = r.error;
-    alert(`학생 ${r.n}명의 기록을 지웠어요.${$("wRoster") && $("wRoster").checked ? " 명단도 지웠어요." : ""}`); go("#/admin/stats");
+    say(`학생 ${r.n}명의 기록을 지웠어요.${$("wRoster") && $("wRoster").checked ? " 명단도 지웠어요." : ""}`); go("#/admin/stats");
   });
   act("wAll", async () => {
     if (!check()) return;
-    if (!confirm("학생 기록, 동아리 수정 내용, 사진, 설정, 일정표, 활동 기록을 모두 지우고 처음 상태로 돌려요. 정말 할까요?")) return;
+    if (!(await ask("학생 기록, 동아리 수정 내용, 사진, 설정, 일정표, 활동 기록을 모두 지우고 처음 상태로 돌려요. 정말 할까요?"))) return;
     const r = await Store.wipeEverything($("wpw").value); $("wpw").value = "";
     if (r.error) return $("werr").textContent = r.error;
-    alert("전부 지웠어요. 학생 명단도 지워졌어요."); go("#/admin");
+    say("전부 지웠어요. 학생 명단도 지워졌어요."); go("#/admin");
   });
 }
 
