@@ -23,7 +23,7 @@ const PARENT_PIN = "7972";
 const SERVER = {
   url: "https://wvraflylepsiefxkusyg.supabase.co",
   key: "sb_publishable_bVBMJj65tuJvFW_DVhOe7w_IJEmWCZE",
-  google: false   // 구글 로그인 설정이 끝나면 true로
+  google: true    // 구글 로그인 연결됨 (2026-11-02)
 };
 // 지도는 처음 동아리 이름 기준으로 그렸으므로, 이름이 바뀌어도 위치를 찾을 수 있게 번호로 연결합니다.
 const DEFAULT_NAME_BY_ID = Object.fromEntries(DEFAULT_CLUBS.map(c => [c.id, c.name]));
