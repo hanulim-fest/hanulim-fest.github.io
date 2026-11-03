@@ -220,3 +220,18 @@ table.log td:last-child { white-space:normal; }
 .dlg-btns { display:flex; gap:8px; }
 .dlg-btns button { flex:1; margin-top:0; }
 @media print { .dlg { display:none; } }
+/* 서버 상태 */
+.pill.state-good { background:#dcfce7; color:#14532d; } .pill.state-warn { background:#fef3c7; color:#78350f; } .pill.state-bad { background:#fde8e8; color:#7f1d1d; }
+.mini-wrap { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:16px; }
+.mini { margin:0; }
+.mini figcaption { font-size:14px; font-weight:600; margin-bottom:6px; }
+.mini svg { width:100%; height:auto; display:block; }
+.mini rect { fill:var(--main); }
+.mini rect:hover { fill:#1e3a8a; }
+.mini-base { stroke:var(--line); stroke-width:1; }
+.mini-axis { display:flex; justify-content:space-between; margin-top:2px; }
+.stat-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr)); gap:10px; margin-top:10px; }
+.stat { background:#f6f7f9; border:1px solid var(--line); border-radius:12px; padding:12px; display:flex; flex-direction:column; gap:2px; min-width:0; }
+.stat b { font-size:24px; font-variant-numeric:tabular-nums; }
+.stat span { font-size:13px; color:var(--ink); }
+.stat small { font-size:12px; color:var(--muted); }

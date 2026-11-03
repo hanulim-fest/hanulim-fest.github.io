@@ -182,6 +182,8 @@ const Store = (() => {
     async setSchedule(list) { return changed(await adm("set_schedule", { p_list: list })); },
     logs: () => adm("get_logs"),
     rosterCount: () => adm("roster_count"),
+    liveStats: () => adm("live_stats"),
+    resetProgress: pin => adm("reset_progress", { p_pin: String(pin || "") }),
     uploadRoster: rows => adm("upload_roster", { p_rows: rows }),
     wipeStudents: (pin, withRoster) => adm("wipe_students", { p_pin: String(pin || ""), p_with_roster: !!withRoster }),
     async wipeEverything(pin) { const r = await adm("wipe_everything", { p_pin: String(pin || "") }); if (r.ok) { ss.del(ADMIN); clearCache(); } return r; }

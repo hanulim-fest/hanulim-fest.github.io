@@ -433,7 +433,7 @@ async function adminRoute(tab, sub, seq) {
   if (!me) return login(null, "admin");
   if (tab === "club") return clubRoute(me, sub, seq);
   if (me.role !== "owner") return go(me.club ? `#/admin/club/${me.club}` : "#/admin/club");
-  const tabs = [["stats", "현황"], ["club", "동아리별"], ["proxy", "대리 기록"], ["print", "인쇄"], ["settings", "설정"], ["logs", "활동 기록"], ["data", "데이터"]];
+  const tabs = [["stats", "현황"], ["monitor", "서버 상태"], ["club", "동아리별"], ["proxy", "대리 기록"], ["print", "인쇄"], ["settings", "설정"], ["logs", "활동 기록"], ["data", "데이터"]];
   if (!tabs.some(([k]) => k === tab)) tab = "stats";
   document.body.className = "wide";
   $app.innerHTML = `
@@ -442,7 +442,7 @@ async function adminRoute(tab, sub, seq) {
   <div id="tabBody"></div>`;
   bindAdminTop();
   const body = $("tabBody");
-  await ({ stats: aStats, proxy: aProxy, print: aPrint, settings: aSettings, logs: aLogs, data: aData })[tab](body, me, sub);
+  await ({ stats: aStats, monitor: aMonitor, proxy: aProxy, print: aPrint, settings: aSettings, logs: aLogs, data: aData })[tab](body, me, sub);
   finish(body);
 }
 function adminTop(title, extra = "") {
@@ -898,8 +898,63 @@ async function aLogs(el) {
     </tbody></table></div></section>`;
 }
 
+// ---------- 서버 상태 (테스트·축제 당일용, 5초마다 새로고침) ----------
+function miniBars(points, key, label) {
+  const W = 300, H = 70, n = points.length, max = Math.max(1, ...points.map(p => p[key])), bw = W / n;
+  const bars = points.map((p, i) => { const h = Math.round(p[key] / max * (H - 14)); const t = new Date(p.m).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+    return `<rect x="${(i * bw + 1).toFixed(1)}" y="${H - h}" width="${Math.max(1, bw - 2).toFixed(1)}" height="${Math.max(h, p[key] ? 2 : 0)}" rx="1.5"><title>${t} · ${p[key]}</title></rect>`; }).join("");
+  return `<figure class="mini"><figcaption>${esc(label)} <span class="muted small">최근 30분, 최고 ${max}</span></figcaption>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)} 최근 30분 분당 그래프"><line x1="0" y1="${H - .5}" x2="${W}" y2="${H - .5}" class="mini-base"></line>${bars}</svg>
+    <div class="mini-axis muted small"><span>30분 전</span><span>지금</span></div></figure>`;
+}
+async function aMonitor(el) {
+  const seq = renderSeq, hash = location.hash;
+  el.innerHTML = `<section class="card"><h2>서버 상태 <span class="pill" id="mState">확인 중</span></h2>
+    <p class="muted small">5초마다 자동으로 새로고침돼요. 이 화면을 켜둔 동안만 확인해요. <span id="mTime"></span></p>
+    <div class="stat-grid" id="mCards"></div></section>
+    <section class="card"><div class="mini-wrap" id="mCharts"></div></section>
+    <section class="card"><h2>최근 30분 확인할 기록</h2><div id="mErr"><p class="muted">없음</p></div></section>`;
+  let fails = 0;
+  const tick = async () => {
+    if (seq !== renderSeq || location.hash !== hash || !document.body.contains(el)) return;
+    const t0 = performance.now();
+    let d = null;
+    try { d = await Store.liveStats(); fails = 0; } catch (e) { if (e && e.code === "denied") return handleError(e); fails++; }
+    const ms = Math.round(performance.now() - t0);
+    if (seq !== renderSeq || !document.body.contains(el)) return;
+    const st = $("mState");
+    if (!d) { st.textContent = fails > 1 ? "연결 안 됨" : "응답 없음"; st.className = "pill state-bad"; }
+    else {
+      const slow = ms > 3000 ? "bad" : ms > 1000 ? "warn" : "good";
+      st.textContent = { good: "정상", warn: "느림", bad: "매우 느림" }[slow] + ` · ${ms}ms`; st.className = "pill state-" + slow;
+      $("mTime").textContent = "마지막 확인 " + new Date(d.now).toLocaleTimeString("ko-KR");
+      const card = (v, l, sub) => `<div class="stat"><b>${v}</b><span>${esc(l)}</span>${sub ? `<small>${esc(sub)}</small>` : ""}</div>`;
+      $("mCards").innerHTML = [
+        card(d.students, "로그인한 학생", `명단 ${d.roster}명 · 게스트 ${d.guests}`),
+        card(d.newLogins5m, "최근 5분 새 로그인", ""),
+        card(d.active5m, "최근 5분 스탬프 찍은 학생", ""),
+        card(d.stamps, "스탬프 전체", `최근 1분 ${d.stamps1m} · 5분 ${d.stamps5m}`),
+        card(d.rewards, "보상 지급", `최근 5분 ${d.rewards5m}`),
+        card(d.pinLocked, "보상 화면 잠긴 학생", d.pinLocked ? "대리 기록에서 풀 수 있어요" : ""),
+        card(`${d.conns}/${d.maxConns}`, "DB 연결", d.conns / d.maxConns > .8 ? "많음! 지켜보세요" : "여유 있음"),
+        card(`${(d.dbBytes / 1048576).toFixed(1)}MB`, "DB 크기", "무료 한도 500MB")
+      ].join("");
+      $("mCharts").innerHTML = miniBars(d.perMin || [], "s", "분당 스탬프") + miniBars(d.perMin || [], "l", "분당 새 로그인");
+      $("mErr").innerHTML = d.recentErrors.length ? d.recentErrors.map(x => `<div class="row"><span>${esc(x.a)} <span class="muted small">${esc(x.d)}</span></span><span class="muted small nowrap">${fmtTime(x.t)}</span></div>`).join("") : `<p class="muted">없음</p>`;
+    }
+    setTimeout(tick, 5000);
+  };
+  tick();
+}
+
 async function aData(el) {
   el.innerHTML = `
+  <section class="card"><h2>시험 기록만 초기화</h2>
+    <p>학급 사전 테스트가 끝난 뒤 쓰세요. <b>스탬프와 보상 기록만</b> 지우고, 학생 로그인·명단·동아리·사진·설정은 그대로 둬요. 테스트한 학생은 축제 때 다시 로그인하지 않아도 돼요.</p>
+    <label>총괄 핀 다시 입력 <input id="rpw" type="password" inputmode="numeric" maxlength="8" autocomplete="off"></label>
+    <p id="rerr" class="error" role="alert"></p>
+    <button class="danger" id="rProgress">스탬프·보상 기록만 초기화</button>
+  </section>
   <section class="card"><h2>축제 후 개인정보 삭제</h2>
     <p>학교와 약속한 대로 <b>축제 종료 후 일주일 안에</b> 학생 기록을 지워주세요. 지우기 전에 현황 화면에서 결과 파일을 먼저 내려받으세요.</p>
     <label>총괄 핀 다시 입력 <input id="wpw" type="password" inputmode="numeric" maxlength="8" autocomplete="off"></label>
@@ -909,6 +964,13 @@ async function aData(el) {
     <button class="danger" id="wStudents">학생 기록 삭제 (동아리·사진·설정·일정표는 유지)</button>
     <button class="danger" id="wAll">전체 초기화 (동아리 정보·사진·설정·일정표까지 처음 상태로)</button>
   </section>`;
+  act("rProgress", async () => {
+    $("rerr").textContent = "";
+    if (!(await ask("모든 학생의 스탬프와 보상 기록을 지워요. 로그인과 명단은 남아요. 할까요?"))) return;
+    const r = await Store.resetProgress($("rpw").value); $("rpw").value = "";
+    if (r.error) return $("rerr").textContent = r.error;
+    say(`스탬프 ${r.stamps}개, 보상 ${r.rewards}명 기록을 지웠어요.`); go("#/admin/stats");
+  });
   const check = () => { if ($("wconfirm").value.trim() !== "삭제") { $("werr").textContent = "'삭제'라고 입력해주세요."; return false; } return true; };
   act("wStudents", async () => {
     if (!check()) return;
