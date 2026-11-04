@@ -249,7 +249,7 @@ async function board(me) {
     <button class="link small" id="logout">로그아웃</button></header>
   ${me.clubName || (!me.guest && me.inRoster) ? `<p class="my-club">내 동아리 <b>${esc(me.clubName ? (me.clubId && byId[me.clubId] ? byId[me.clubId].name : me.clubName) : "없음")}</b>${me.clubName && !(me.clubId && byId[me.clubId]) ? ` <span class="muted small">부스 없음</span>` : ""}</p>` : ""}
   ${cur.length ? `<button type="button" class="now-banner" data-go="#/schedule"><span class="pill now">지금</span> ${cur.map(({ r }) => `<b>${esc(r.t)}</b>${myTask(r, me) ? ` <span class="small">· 나: ${esc(myTask(r, me))}</span>` : ""}`).join("<br>")} <span class="muted small nowrap">일정표 ›</span></button>` : ""}
-  ${s.open ? "" : `<p class="notice">${esc(closedText(s))}<br><span class="small">지금은 지도와 동아리 소개를 미리 볼 수 있어요.</span></p>`}
+  ${s.open ? "" : `<p class="notice">${esc(closedText(s))}<br><span class="small">지금은 동아리 지도·목록과 축제 일정표를 미리 볼 수 있어요.</span></p>`}
   <section class="card">
     <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="${s.required}" aria-valuenow="${Math.min(count, s.required)}"><div data-w="${count / s.required * 100}"></div></div>
     <p class="progress-text">${Math.min(count, s.required)} / ${s.required}${count > s.required ? ` <span class="muted small">(총 ${count}개)</span>` : ""}</p>
@@ -257,7 +257,7 @@ async function board(me) {
     ${me.rewardAt ? `<p class="notice good-bg">보상 받음 · ${fmtTime(me.rewardAt)}</p>` :
       done && s.open ? `<button class="primary huge" data-go="#/reward">보상 받기</button>` :
       `<p class="muted center">부스에 있는 QR을 휴대폰 카메라로 찍으세요.</p>`}
-    <div class="three-btn"><button class="secondary" data-go="#/map">지도</button><button class="secondary" data-go="#/list">목록</button><button class="secondary" data-go="#/schedule">일정표</button></div>
+    <div class="three-btn"><button class="secondary" data-go="#/map">동아리<br>지도</button><button class="secondary" data-go="#/list">동아리<br>목록</button><button class="secondary" data-go="#/schedule">축제<br>일정표</button></div>
   </section>`;
   finish();
   act("logout", async () => { await Store.logoutStudent(); go("#/"); });
@@ -267,7 +267,9 @@ async function clubList(me) {
   const clubs = await Store.clubs();
   const floors = [...new Set(clubs.map(c => c.floor))].sort((a, b) => a.localeCompare(b, "ko", { numeric: true }));
   $app.innerHTML = `
-  <header class="top"><button class="link" data-go="#/">← 스탬프판</button><button class="link small" data-go="#/map">지도로 보기</button></header>
+  <header class="top"><button class="link" data-go="#/">← 스탬프판</button><button class="link small" data-go="#/map">동아리 지도로 보기 ›</button></header>
+  <h1 class="page-title">동아리 목록</h1>
+  <p class="muted small page-sub">층별 부스 목록이에요. 동아리를 누르면 동아리 지도에서 위치를 보여줘요. ✓는 스탬프를 찍은 곳이에요.</p>
   ${floors.map(f => `<section class="card"><h2>${esc(f)}</h2>
     ${clubs.filter(c => c.floor === f).map(c => { const at = mapPlace(c); return `<${at ? `button type="button" data-go="#/map/${at.floor}/${esc(c.id)}"` : "div"} class="row ${at ? "row-btn" : ""} ${me.stamps[c.id] ? "done" : ""}">
       <span>${me.stamps[c.id] ? "✓ " : ""}${esc(c.name)}${c.intro ? `<span class="intro">${esc(c.intro)}</span>` : ""}</span><span class="muted nowrap">${esc(c.loc)}${at ? " ›" : ""}</span></${at ? "button" : "div"}>`; }).join("")}
@@ -335,7 +337,8 @@ async function schoolMap(me, floorArg, focusId) {
   const unmapped = clubs.filter(c => !mapPlace(c));
 
   $app.innerHTML = `
-  <header class="top"><button class="link" data-go="#/">← 스탬프판</button><button class="link small" data-go="#/list">목록으로 보기</button></header>
+  <header class="top"><button class="link" data-go="#/">← 스탬프판</button><button class="link small" data-go="#/list">동아리 목록으로 보기 ›</button></header>
+  <h1 class="page-title">동아리 지도</h1>
   <nav class="floor-tabs" aria-label="층 선택">${FLOORS.map((f, i) => { const st = floorStat(f); return `<button class="ftab ${i + 1 === fi ? "on" : ""}" data-go="#/map/${i + 1}">${f}${st.all ? `<small>${st.got}/${st.all}</small>` : `<small>부스 없음</small>`}</button>`; }).join("")}</nav>
   <section class="card map-card">
     <svg class="map-svg" viewBox="${vb}" role="img" aria-label="${floor} 지도">${drawn.map(([r, i]) => cell(r, i)).join("")}</svg>
@@ -372,7 +375,7 @@ async function schedulePage(me) {
   const curIdx = new Set(isDay ? nowRows(list, t).map(x => x.i) : []);
   const grade = !me.guest && (me.grade === 1 || me.grade === 2) ? me.grade : 0;
   $app.innerHTML = `
-  <header class="top"><button class="link" data-go="#/">← 스탬프판</button><button class="link small" data-go="#/map">지도</button></header>
+  <header class="top"><button class="link" data-go="#/">← 스탬프판</button><button class="link small" data-go="#/map">동아리 지도 ›</button></header>
   <section class="card">
     <h1>축제 일정표</h1>
     <p class="muted small">${s.festivalDate ? esc(fmtDay(s.festivalDate)) : "축제 날짜 미정"}${grade ? ` · ${grade}학년 할 일은 <b>나</b>로 표시돼요` : ""}</p>

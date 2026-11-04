@@ -244,3 +244,6 @@ table.log td:last-child { white-space:normal; }
 .doc ul { padding-left:20px; margin:6px 0; }
 .doc li { margin:4px 0; line-height:1.55; }
 .doc p { line-height:1.6; }
+.page-title { font-size:22px; margin:6px 2px 2px; }
+.page-sub { margin:0 2px 8px; }
+.three-btn .secondary { line-height:1.25; padding-top:10px; padding-bottom:10px; font-weight:600; }
