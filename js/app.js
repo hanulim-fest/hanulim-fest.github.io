@@ -10,6 +10,16 @@ const clubUrl = id => baseUrl() + "#/s/" + id;
 const who = u => u.guest ? "게스트" : `${u.grade}학년 ${u.cls}반 ${u.num}번`;
 const fmtDay = d => { if (!d) return ""; const [y, m, dd] = d.split("-").map(Number); return `${m}월 ${dd}일 (${"일월화수목금토"[new Date(y, m - 1, dd).getDay()]})`; };
 const closedText = s => s.festivalDate ? `스탬프와 보상은 축제 날인 ${fmtDay(s.festivalDate)}에만 할 수 있어요.` : "스탬프와 보상은 축제 날에만 할 수 있어요. (축제 날짜가 아직 정해지지 않았어요)";
+// 앱 안 브라우저(카카오톡 등)에서는 구글이 로그인을 막음 → 카카오톡·라인은 바깥 브라우저로 자동으로 다시 열고, 나머지는 안내
+const UA = navigator.userAgent || "";
+const IN_APP = /KAKAOTALK/i.test(UA) ? "kakao" : /\bLine\//i.test(UA) ? "line"
+  : /NAVER\(inapp|Instagram|FBAN|FBAV|FB_IAB|DaumApps|everytimeApp/i.test(UA) || /; wv\)/.test(UA) ? "other" : "";
+function openOutside() {
+  const here = location.href;
+  if (IN_APP === "kakao") location.href = "kakaotalk://web/openExternal?url=" + encodeURIComponent(here);
+  else if (IN_APP === "line") location.href = here.replace(/#.*$/, "") + (here.includes("?") ? "&" : "?") + "openExternalBrowser=1" + location.hash;
+}
+const inAppNotice = () => IN_APP ? `<div class="notice warn-bg inapp"><b>이 화면은 ${IN_APP === "kakao" ? "카카오톡" : IN_APP === "line" ? "라인" : "앱"} 안의 브라우저예요.</b><br>여기서는 구글 로그인이 막혀요. 오른쪽 위(또는 아래) <b>⋮ 메뉴 → "다른 브라우저로 열기"</b>를 눌러 크롬·사파리로 열어주세요.${IN_APP !== "other" ? `<button class="secondary" id="openOut">바깥 브라우저로 열기</button>` : ""}</div>` : "";
 // 일정표: 지금 시각과 비교 (축제 날에만 "지금" 표시)
 const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const nowHM = () => { const d = new Date(); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
@@ -156,6 +166,7 @@ async function login(note, mode = "student") {
       <button class="primary" id="aBtn">로그인</button>
       <p class="muted small">5번 틀리면 10분 동안 잠겨요. 30분 동안 아무것도 안 하면 자동으로 로그아웃돼요.</p>
     </div>` : `
+    ${inAppNotice()}
     <div class="login-box">
       <b>학생 로그인</b>
       <p class="muted small">학교 구글 계정(s로 시작하는 @siheung.hs.kr)으로 로그인해요. 이름과 동아리는 학번으로 자동으로 찾아요.</p>
@@ -163,6 +174,7 @@ async function login(note, mode = "student") {
       <button class="primary" id="loginBtn">학교 구글 계정으로 로그인</button>
     </div>
     <button class="link" id="guestBtn">학교 계정이 없어요 (외부 방문객)</button>`}
+    <p class="small"><a class="muted" href="privacy.html">개인정보 처리 안내</a></p>
   </section>`;
   if (admin) {
     const inp = $("apin");
@@ -179,8 +191,10 @@ async function login(note, mode = "student") {
     return;
   }
   const ln = Store.loginNote(); if (ln) $("err").textContent = ln;
+  if ($("openOut")) $("openOut").addEventListener("click", openOutside);
   act("loginBtn", async () => {
     $("err").textContent = "";
+    if (IN_APP) { openOutside(); $("err").textContent = "앱 안의 브라우저에서는 구글 로그인이 안 돼요. 위 안내대로 크롬·사파리로 열어주세요."; return; }
     const r = Store.loginGoogle();
     if (r.error) $("err").textContent = r.error;
   });
@@ -1002,4 +1016,6 @@ async function aData(el) {
 }
 
 
+// 카카오톡·라인으로 열렸으면 처음 한 번 바깥 브라우저로 자동으로 다시 열기 (안 열리면 로그인 화면 안내가 보임)
+try { if ((IN_APP === "kakao" || IN_APP === "line") && !sessionStorage.getItem("qdp-out-tried")) { sessionStorage.setItem("qdp-out-tried", "1"); openOutside(); } } catch {}
 render();
