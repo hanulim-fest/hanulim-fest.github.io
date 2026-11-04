@@ -235,3 +235,4 @@ table.log td:last-child { white-space:normal; }
 .stat b { font-size:24px; font-variant-numeric:tabular-nums; }
 .stat span { font-size:13px; color:var(--ink); }
 .stat small { font-size:12px; color:var(--muted); }
+.sub-h { font-size:15px; margin:18px 0 4px; }

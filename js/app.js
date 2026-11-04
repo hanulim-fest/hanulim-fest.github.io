@@ -826,7 +826,12 @@ async function aSettings(el) {
     <p class="muted small">학생이 로그인하면 학번으로 이름과 소속 동아리를 찾는 명단이에요. 지금 <b id="rosterN">…</b>명이 올라가 있어요.</p>
     <p class="muted small">CSV 파일(학번 5자리, 이름, 소속 동아리명 순서)을 고르면 기존 명단을 통째로 바꿔요. 파일은 이 화면에서만 읽고 바로 서버로 보내요.</p>
     <label class="upload-btn">명단 CSV 파일 고르기<input type="file" id="rosterFile" accept=".csv,text/csv" hidden></label>
-    <p id="rosterMsg" class="muted small" role="status"></p></section>
+    <p id="rosterMsg" class="muted small" role="status"></p>
+    <h3 class="sub-h">한 명 추가·수정 (전학생 등)</h3>
+    <p class="muted small">이미 명단에 있는 학번을 넣으면 이름·동아리를 고쳐요. 이미 로그인한 학생도 바로 반영돼요. 동아리가 없으면 비워두세요.</p>
+    <div class="add-row"><input id="r1h" placeholder="학번 (10914 또는 s2610914)" maxlength="30" autocapitalize="off" spellcheck="false"><input id="r1n" placeholder="이름" maxlength="20"><input id="r1c" placeholder="동아리 (없으면 비움)" maxlength="30" list="r1clubs"><button class="secondary" id="r1save">저장</button></div>
+    <datalist id="r1clubs">${clubs.map(c => `<option value="${esc(c.name)}">`).join("")}</datalist>
+    <p id="r1msg" class="muted small" role="status"></p></section>
   <section class="card"><h2>학부모 확인 비밀번호</h2>
     <p class="pin-fixed">${esc(PARENT_PIN)}</p>
     <p class="muted small">고정 번호예요. 보상은 수령 장소에서 직접 받으므로 번호가 알려져도 문제가 없어요. 학부모 안내문에도 이 번호가 인쇄돼요.</p></section>
@@ -854,6 +859,15 @@ async function aSettings(el) {
       msg.textContent = `${r.n}명을 올렸어요.${r.bad ? ` 형식이 맞지 않는 ${r.bad}줄은 뺐어요.` : ""}${r.noClub ? ` 동아리 목록에 없는 동아리명이 적힌 학생이 ${r.noClub}명 있어요.` : ""}`;
       $("rosterN").textContent = r.n;
     } catch (err) { handleError(err); }
+  });
+  // 명단 한 명 추가·수정
+  act("r1save", async () => {
+    const msg = $("r1msg"); msg.textContent = "";
+    const r = await Store.rosterAddOne($("r1h").value, $("r1n").value, $("r1c").value);
+    if (r.error) return msg.textContent = r.error;
+    msg.textContent = `${r.updated ? "고쳤어요" : "추가했어요"}.${r.club && !r.boothClub ? " (부스가 없는 동아리예요)" : ""}${r.loggedIn ? " 이미 로그인한 학생이라 바로 반영됐어요." : " 이 학생이 로그인하면 이름과 동아리가 자동으로 나와요."}`;
+    ["r1h", "r1n", "r1c"].forEach(id => $(id).value = "");
+    Store.rosterCount().then(x => { if ($("rosterN")) $("rosterN").textContent = x.n; }).catch(() => {});
   });
   // 일정표 편집
   const F = [["s", 5, "시작 09:30"], ["e", 5, "끝"], ["t", 30, "일정 이름"], ["p", 30, "장소"], ["g1", 30, "1학년 할 일"], ["g2", 30, "2학년 할 일"], ["n", 60, "메모"]];

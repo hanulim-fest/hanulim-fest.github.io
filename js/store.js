@@ -185,6 +185,7 @@ const Store = (() => {
     liveStats: () => adm("live_stats"),
     resetProgress: pin => adm("reset_progress", { p_pin: String(pin || "") }),
     uploadRoster: rows => adm("upload_roster", { p_rows: rows }),
+    rosterAddOne: (hakbun, name, club) => adm("roster_add_one", { p_hakbun: String(hakbun || ""), p_name: String(name || ""), p_club: String(club || "") }),
     wipeStudents: (pin, withRoster) => adm("wipe_students", { p_pin: String(pin || ""), p_with_roster: !!withRoster }),
     async wipeEverything(pin) { const r = await adm("wipe_everything", { p_pin: String(pin || "") }); if (r.ok) { ss.del(ADMIN); clearCache(); } return r; }
   };
