@@ -1,4 +1,6 @@
 "use strict";
+// 다른 사이트가 이 화면을 몰래 틀 안에 넣지 못하게 (클릭 유도 공격 대비)
+if (window.top !== window.self) { document.documentElement.hidden = true; try { window.top.location.replace(window.location.href); } catch {} }
 const $app = document.getElementById("app");
 const esc = s => String(s ?? "").replace(/[&<>"'`]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;", "`": "&#96;" }[c]));
 const $ = id => document.getElementById(id);
@@ -6,7 +8,7 @@ const go = h => { if (location.hash === h) render(); else location.hash = h; };
 const fmtTime = t => new Date(t).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
 const fmtDate = t => new Date(t).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
 const baseUrl = () => location.href.split("#")[0];
-const clubUrl = id => baseUrl() + "#/s/" + id;
+const clubUrl = (id, code) => baseUrl() + "#/s/" + id + "/" + code;
 const who = u => u.guest ? "게스트" : `${u.grade}학년 ${u.cls}반 ${u.num}번`;
 const fmtDay = d => { if (!d) return ""; const [y, m, dd] = d.split("-").map(Number); return `${m}월 ${dd}일 (${"일월화수목금토"[new Date(y, m - 1, dd).getDay()]})`; };
 const closedText = s => s.festivalDate ? `스탬프와 보상은 축제 날인 ${fmtDay(s.festivalDate)}에만 할 수 있어요.` : "스탬프와 보상은 축제 날에만 할 수 있어요. (축제 날짜가 아직 정해지지 않았어요)";
@@ -124,7 +126,7 @@ async function render() {
     if (route === "admin") return await adminRoute(arg || "stats", sub, seq);
     const me = await Store.me();
     if (seq !== renderSeq) return;
-    if (route === "s") return await scan(arg, me);
+    if (route === "s") return await scan(arg, me, sub);
     if (!me) return await login();
     if (route === "reward") return await reward(me);
     if (route === "list") return await clubList(me);
@@ -208,14 +210,14 @@ async function login(note, mode = "student") {
 function afterLogin() {
   let pending = null;
   try { pending = sessionStorage.getItem("pendingClub"); sessionStorage.removeItem("pendingClub"); } catch {}
-  go(pending && /^c\d{2,3}$/.test(pending) ? "#/s/" + pending : "#/");
+  go(pending && /^c\d{2,3}\/[0-9a-f]{10}$/.test(pending) ? "#/s/" + pending : "#/");
 }
 
-async function scan(clubId, me) {
-  if (!me) { try { sessionStorage.setItem("pendingClub", String(clubId || "").slice(0, 5)); } catch {} return login("로그인하면 바로 스탬프가 찍혀요."); }
+async function scan(clubId, me, code) {
+  if (!me) { try { sessionStorage.setItem("pendingClub", String(clubId || "").slice(0, 5) + "/" + String(code || "").slice(0, 10)); } catch {} return login("로그인하면 바로 스탬프가 찍혀요."); }
   const s = await Store.settings();
-  const r = await Store.addStamp(clubId);
-  const club = await Store.club(clubId), fresh = await Store.me();
+  const r = await Store.addStamp(clubId, code);
+  const club = r === "unknown" ? { name: "" } : await Store.club(clubId), fresh = await Store.me();
   const count = Object.keys(fresh.stamps).length;
   const view = r === "unknown" ? { t: "없는 QR이에요", d: "부스 담당 학생에게 알려주세요.", c: "bad", m: "×" }
     : r === "closed" ? { t: "아직 스탬프를 찍을 수 없어요", d: closedText(s), c: "warn", m: "!" }
@@ -356,6 +358,7 @@ async function schoolMap(me, floorArg, focusId) {
     const cl = boothClubs(r), seq = ++selSeq;
     info.innerHTML = `<h2>${esc(r[5])} <span class="muted small">${esc(floor)}</span></h2>
       ${cl.map(c => `<div class="club-block"><div class="row ${me.stamps[c.id] ? "done" : ""}"><span>${me.stamps[c.id] ? "✓ " : ""}${esc(c.name)}${c.id === me.clubId ? ` <span class="pill mine">내 동아리</span>` : ""}${c.intro ? `<span class="intro">${esc(c.intro)}</span>` : ""}</span><span class="muted small nowrap">${me.stamps[c.id] ? "스탬프 완료" : "아직 안 찍음"}</span></div><div class="ph-slot" data-club="${esc(c.id)}"></div></div>`).join("")}`;
+    if (me.guest && cl.length) info.insertAdjacentHTML("beforeend", `<p class="muted small">동아리 사진은 학교 계정으로 로그인한 학생만 볼 수 있어요.</p>`);
     cl.forEach(async c => {
       const strip = await photoStrip(c.id, c.name);
       const slot = info.querySelector(`.ph-slot[data-club="${c.id}"]`);
@@ -634,7 +637,7 @@ async function cQr(el, club) {
   const b = document.createElement("b"); b.textContent = club.name;
   const sp = document.createElement("span"); sp.textContent = `${club.floor} · ${club.loc}`;
   const sm = document.createElement("small"); sm.textContent = "휴대폰 카메라로 찍으세요";
-  box.append(title, QR.toSvg(clubUrl(club.id), 300), b, sp, sm);
+  box.append(title, QR.toSvg(clubUrl(club.id, await Store.clubCode(club.id)), 300), b, sp, sm);
   $("doPrint").addEventListener("click", () => print());
 }
 
@@ -779,13 +782,14 @@ async function aPrint(el, me, sub) {
   const area = $("printArea");
   if (view === "qr") {
     area.className = "print-area qr-sheet";
+    const codes = await Store.clubCodes();
     clubs.forEach(c => {
       const card = document.createElement("div"); card.className = "qr-card";
       const title = document.createElement("div"); title.className = "qr-title"; title.textContent = "한울림제 스탬프 투어";
       const b = document.createElement("b"); b.textContent = c.name;
       const sp = document.createElement("span"); sp.textContent = `${c.floor} · ${c.loc}`;
       const sm = document.createElement("small"); sm.textContent = "휴대폰 카메라로 찍으세요";
-      card.append(title, QR.toSvg(clubUrl(c.id), 170), b, sp, sm);
+      card.append(title, QR.toSvg(clubUrl(c.id, codes[c.id]), 170), b, sp, sm);
       area.appendChild(card);
     });
   } else {

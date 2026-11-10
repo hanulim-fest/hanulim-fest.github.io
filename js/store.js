@@ -138,7 +138,7 @@ const Store = (() => {
       if (!u) u = await ensureStudent();
       meCache = u; return u;
     },
-    async addStamp(clubId) { return rpc("add_stamp", { p_club: String(clubId || "").slice(0, 5) }, true); },
+    async addStamp(clubId, code) { return rpc("add_stamp", { p_club: String(clubId || "").slice(0, 5), p_code: String(code || "").slice(0, 10) }, true); },
     async redeem(pin) { return rpc("redeem", { p_pin: String(pin) }, true); },
 
     // ===== 관리자 =====
@@ -159,11 +159,19 @@ const Store = (() => {
     selectClub: id => adm("select_club", { p_club: id }),
     clubVisitors: id => adm("club_visitors", { p_club: id }),
     clubMembers: id => adm("club_members", { p_club: id }),
+    // 사진은 학교 계정 학생(로그인 토큰) 또는 관리자(관리자 토큰)만 받을 수 있음
     async clubPhotos(id) {
-      const l = await cached("photos:" + id, 60e3, () => rpc("club_photos", { p_club: id }));
-      return l.map(p => ({ id: p.id, at: p.at, thumb: b64ToBlob(p.thumb) }));
+      const a = ss.get(ADMIN), adm_ = !!(a && a.token);
+      const l = await cached("photos:" + id, 60e3, () => rpc("club_photos", adm_ ? { p_club: id, p_token: a.token } : { p_club: id }, !adm_));
+      return (l || []).map(p => ({ id: p.id, at: p.at, thumb: b64ToBlob(p.thumb) }));
     },
-    async photoFull(photoId) { const b = await cached("full:" + photoId, 300e3, () => rpc("photo_full", { p_id: photoId })); return b ? b64ToBlob(b) : null; },
+    async photoFull(photoId) {
+      const a = ss.get(ADMIN), adm_ = !!(a && a.token);
+      const b = await cached("full:" + photoId, 300e3, () => rpc("photo_full", adm_ ? { p_id: photoId, p_token: a.token } : { p_id: photoId }, !adm_));
+      return b ? b64ToBlob(b) : null;
+    },
+    clubCode: id => adm("club_code", { p_club: id }),
+    clubCodes: () => adm("club_codes"),
     async addClubPhoto(id, full, thumb) { return changed(await adm("add_club_photo", { p_club: id, p_full: await blobToB64(full), p_thumb: await blobToB64(thumb) })); },
     async deleteClubPhoto(id, photoId) { return changed(await adm("delete_club_photo", { p_club: id, p_id: photoId })); },
     async updateClubInfo(id, info) { return changed(await adm("update_club_info", { p_club: id, p_info: info })); },
