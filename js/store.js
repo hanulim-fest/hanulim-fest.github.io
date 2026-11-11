@@ -113,6 +113,9 @@ const Store = (() => {
     clubs() { return cached("clubs", 60e3, () => rpc("get_clubs")).then(l => l.map(c => ({ ...c }))); },
     async club(id) { const c = (await this.clubs()).find(x => x.id === id); return c || null; },
     schedule() { return cached("schedule", 60e3, () => rpc("get_schedule")).then(l => l.map(r => ({ ...r }))); },
+    notices() { return cached("notices", 30e3, () => rpc("get_notices")).then(n => ({ all: (n && n.all) || [], clubs: (n && n.clubs) || {} })); },
+    async postNotice(clubId, body) { return changed(await adm("post_notice", { p_club: clubId || null, p_body: String(body || "").slice(0, 200) })); },
+    async deleteNotice(id) { return changed(await adm("delete_notice", { p_id: id })); },
 
     // 구글 학교 계정 로그인: 구글 화면으로 갔다가 이 주소로 돌아옴
     loginGoogle() {

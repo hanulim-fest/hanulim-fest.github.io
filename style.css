@@ -247,3 +247,10 @@ table.log td:last-child { white-space:normal; }
 .page-title { font-size:22px; margin:6px 2px 2px; }
 .page-sub { margin:0 2px 8px; }
 .three-btn .secondary { line-height:1.25; padding-top:10px; padding-bottom:10px; font-weight:600; }
+
+/* 공지 */
+.notice-box { background:#fff7ed; border:1px solid #fed7aa; color:#7c2d12; border-radius:12px; padding:10px 12px; margin:8px 0; }
+.notice-box p { margin:0; font-size:14px; line-height:1.5; overflow-wrap:anywhere; }
+.notice-box p + p { margin-top:6px; padding-top:6px; border-top:1px dashed #fed7aa; }
+.pill.ann { background:#ea580c; color:#fff; font-size:11px; padding:1px 8px; vertical-align:1px; }
+.club-notice { display:block; font-size:13px; color:#9a3412; background:#fff7ed; border-radius:6px; padding:3px 7px; margin-top:4px; font-weight:500; overflow-wrap:anywhere; }

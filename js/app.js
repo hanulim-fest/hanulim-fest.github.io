@@ -6,6 +6,10 @@ const esc = s => String(s ?? "").replace(/[&<>"'`]/g, c => ({ "&": "&amp;", "<":
 const $ = id => document.getElementById(id);
 const go = h => { if (location.hash === h) render(); else location.hash = h; };
 const fmtTime = t => new Date(t).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+const fmtWhen = t => new Date(t).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+const NO_NOTICES = { all: [], clubs: {} };
+const getNotices = () => Store.notices().catch(() => NO_NOTICES);
+const clubNotices = (nt, id) => (nt.clubs[id] || []).map(n => `<span class="club-notice">📢 ${esc(n.body)}</span>`).join("");
 const fmtDate = t => new Date(t).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
 const baseUrl = () => location.href.split("#")[0];
 const clubUrl = (id, code) => baseUrl() + "#/s/" + id + "/" + code;
@@ -236,7 +240,7 @@ async function scan(clubId, me, code) {
 }
 
 async function board(me) {
-  const s = await Store.settings(), clubs = await Store.clubs(), sched = await Store.schedule();
+  const s = await Store.settings(), clubs = await Store.clubs(), sched = await Store.schedule(), nt = await getNotices();
   const byId = Object.fromEntries(clubs.map(c => [c.id, c]));
   const isDay = s.festivalDate && s.festivalDate === (s.today || todayStr());
   const cur = isDay ? nowRows(sched) : [];
@@ -251,6 +255,7 @@ async function board(me) {
     <button class="link small" id="logout">로그아웃</button></header>
   ${me.clubName || (!me.guest && me.inRoster) ? `<p class="my-club">내 동아리 <b>${esc(me.clubName ? (me.clubId && byId[me.clubId] ? byId[me.clubId].name : me.clubName) : "없음")}</b>${me.clubName && !(me.clubId && byId[me.clubId]) ? ` <span class="muted small">부스 없음</span>` : ""}</p>` : ""}
   ${cur.length ? `<button type="button" class="now-banner" data-go="#/schedule"><span class="pill now">지금</span> ${cur.map(({ r }) => `<b>${esc(r.t)}</b>${myTask(r, me) ? ` <span class="small">· 나: ${esc(myTask(r, me))}</span>` : ""}`).join("<br>")} <span class="muted small nowrap">일정표 ›</span></button>` : ""}
+  ${nt.all.length ? `<section class="notice-box" aria-label="전체 공지">${nt.all.map(n => `<p><span class="pill ann">공지</span> ${esc(n.body)} <span class="muted small nowrap">${fmtWhen(n.at)}</span></p>`).join("")}</section>` : ""}
   ${s.open ? "" : `<p class="notice">${esc(closedText(s))}<br><span class="small">지금은 동아리 지도·목록과 축제 일정표를 미리 볼 수 있어요.</span></p>`}
   <section class="card">
     <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="${s.required}" aria-valuenow="${Math.min(count, s.required)}"><div data-w="${count / s.required * 100}"></div></div>
@@ -266,7 +271,7 @@ async function board(me) {
 }
 
 async function clubList(me) {
-  const clubs = await Store.clubs();
+  const clubs = await Store.clubs(), nt = await getNotices();
   const floors = [...new Set(clubs.map(c => c.floor))].sort((a, b) => a.localeCompare(b, "ko", { numeric: true }));
   $app.innerHTML = `
   <header class="top"><button class="link" data-go="#/">← 스탬프판</button><button class="link small" data-go="#/map">동아리 지도로 보기 ›</button></header>
@@ -274,7 +279,7 @@ async function clubList(me) {
   <p class="muted small page-sub">층별 부스 목록이에요. 동아리를 누르면 동아리 지도에서 위치를 보여줘요. ✓는 스탬프를 찍은 곳이에요.</p>
   ${floors.map(f => `<section class="card"><h2>${esc(f)}</h2>
     ${clubs.filter(c => c.floor === f).map(c => { const at = mapPlace(c); return `<${at ? `button type="button" data-go="#/map/${at.floor}/${esc(c.id)}"` : "div"} class="row ${at ? "row-btn" : ""} ${me.stamps[c.id] ? "done" : ""}">
-      <span>${me.stamps[c.id] ? "✓ " : ""}${esc(c.name)}${c.intro ? `<span class="intro">${esc(c.intro)}</span>` : ""}</span><span class="muted nowrap">${esc(c.loc)}${at ? " ›" : ""}</span></${at ? "button" : "div"}>`; }).join("")}
+      <span>${me.stamps[c.id] ? "✓ " : ""}${esc(c.name)}${c.intro ? `<span class="intro">${esc(c.intro)}</span>` : ""}${clubNotices(nt, c.id)}</span><span class="muted nowrap">${esc(c.loc)}${at ? " ›" : ""}</span></${at ? "button" : "div"}>`; }).join("")}
   </section>`).join("")}`;
 }
 
@@ -303,7 +308,7 @@ function fitLabel(text, w, h, bold) {
   return two > one ? { lines, fs: two } : { lines: [text], fs: Math.max(4.5, one) };
 }
 async function schoolMap(me, floorArg, focusId) {
-  const clubs = await Store.clubs();
+  const clubs = await Store.clubs(), nt = await getNotices();
   const byId = Object.fromEntries(clubs.map(c => [c.id, c]));
   const fi = Math.min(5, Math.max(1, parseInt(floorArg, 10) || 1)), floor = FLOORS[fi - 1];
   const focus = clubs.find(c => c.id === focusId);
@@ -357,7 +362,7 @@ async function schoolMap(me, floorArg, focusId) {
     $app.querySelector(`.map-svg g[data-room="${i}"]`)?.classList.add("m-sel");
     const cl = boothClubs(r), seq = ++selSeq;
     info.innerHTML = `<h2>${esc(r[5])} <span class="muted small">${esc(floor)}</span></h2>
-      ${cl.map(c => `<div class="club-block"><div class="row ${me.stamps[c.id] ? "done" : ""}"><span>${me.stamps[c.id] ? "✓ " : ""}${esc(c.name)}${c.id === me.clubId ? ` <span class="pill mine">내 동아리</span>` : ""}${c.intro ? `<span class="intro">${esc(c.intro)}</span>` : ""}</span><span class="muted small nowrap">${me.stamps[c.id] ? "스탬프 완료" : "아직 안 찍음"}</span></div><div class="ph-slot" data-club="${esc(c.id)}"></div></div>`).join("")}`;
+      ${cl.map(c => `<div class="club-block"><div class="row ${me.stamps[c.id] ? "done" : ""}"><span>${me.stamps[c.id] ? "✓ " : ""}${esc(c.name)}${c.id === me.clubId ? ` <span class="pill mine">내 동아리</span>` : ""}${c.intro ? `<span class="intro">${esc(c.intro)}</span>` : ""}${clubNotices(nt, c.id)}</span><span class="muted small nowrap">${me.stamps[c.id] ? "스탬프 완료" : "아직 안 찍음"}</span></div><div class="ph-slot" data-club="${esc(c.id)}"></div></div>`).join("")}`;
     if (me.guest && cl.length) info.insertAdjacentHTML("beforeend", `<p class="muted small">동아리 사진은 학교 계정으로 로그인한 학생만 볼 수 있어요.</p>`);
     cl.forEach(async c => {
       const strip = await photoStrip(c.id, c.name);
@@ -453,7 +458,7 @@ async function adminRoute(tab, sub, seq) {
   if (!me) return login(null, "admin");
   if (tab === "club") return clubRoute(me, sub, seq);
   if (me.role !== "owner") return go(me.club ? `#/admin/club/${me.club}` : "#/admin/club");
-  const tabs = [["stats", "현황"], ["monitor", "서버 상태"], ["club", "동아리별"], ["proxy", "대리 기록"], ["print", "인쇄"], ["settings", "설정"], ["logs", "활동 기록"], ["data", "데이터"]];
+  const tabs = [["stats", "현황"], ["monitor", "서버 상태"], ["notice", "전체 공지"], ["club", "동아리별"], ["proxy", "대리 기록"], ["print", "인쇄"], ["settings", "설정"], ["logs", "활동 기록"], ["data", "데이터"]];
   if (!tabs.some(([k]) => k === tab)) tab = "stats";
   document.body.className = "wide";
   $app.innerHTML = `
@@ -462,7 +467,7 @@ async function adminRoute(tab, sub, seq) {
   <div id="tabBody"></div>`;
   bindAdminTop();
   const body = $("tabBody");
-  await ({ stats: aStats, monitor: aMonitor, proxy: aProxy, print: aPrint, settings: aSettings, logs: aLogs, data: aData })[tab](body, me, sub);
+  await ({ stats: aStats, monitor: aMonitor, notice: el => noticeEditor(el, null), proxy: aProxy, print: aPrint, settings: aSettings, logs: aLogs, data: aData })[tab](body, me, sub);
   finish(body);
 }
 function adminTop(title, extra = "") {
@@ -481,7 +486,7 @@ async function clubRoute(me, sub, seq) {
   if (seq !== renderSeq) return;
   if (r.error) return go("#/admin/club");
   const club = await Store.club(clubId);
-  const views = [["stats", "방문 현황"], ["members", "부원"], ["photos", "사진"], ["qr", "우리 QR"], ["info", "정보 수정"]];
+  const views = [["stats", "방문 현황"], ["members", "부원"], ["notice", "공지"], ["photos", "사진"], ["qr", "우리 QR"], ["info", "정보 수정"]];
   const v = views.some(([k]) => k === view) ? view : "stats";
   document.body.className = "wide";
   $app.innerHTML = `
@@ -494,7 +499,7 @@ async function clubRoute(me, sub, seq) {
   <div id="tabBody"></div>`;
   bindAdminTop();
   const body = $("tabBody");
-  await ({ stats: cStats, members: cMembers, photos: cPhotos, qr: cQr, info: cInfo })[v](body, club, me);
+  await ({ stats: cStats, members: cMembers, notice: (el, c) => noticeEditor(el, c.id), photos: cPhotos, qr: cQr, info: cInfo })[v](body, club, me);
   finish(body);
 }
 
@@ -670,6 +675,34 @@ async function cInfo(el, club, me) {
     $("imsg").textContent = r.error || (r.same ? "바뀐 내용이 없어요." : "저장했어요.");
     if (!r.error && !r.same && owner) setTimeout(render, 600);
   });
+}
+
+// ---------- 공지 (전체: 총괄 / 동아리: 그 동아리 관리자) ----------
+async function noticeEditor(el, clubId) {
+  const nt = await Store.notices();
+  const list = clubId ? (nt.clubs[clubId] || []) : nt.all;
+  el.innerHTML = `
+  <section class="card"><h2>${clubId ? "동아리 공지" : "전체 공지"}</h2>
+    <p class="muted small">${clubId ? "학생들이 동아리 목록과 동아리 지도에서 우리 동아리 칸에 보게 돼요. 예: 오후 2시에 공연해요!" : "모든 학생의 스탬프판 맨 위에 보여요. 예: 보상은 1층 중앙현관에서 받아요."} 최대 3개, 한 공지에 200자까지 쓸 수 있어요.</p>
+    <label>새 공지 <span class="muted small" id="ncount">0/200</span>
+      <textarea id="nbody" maxlength="200" rows="3" placeholder="공지 내용"></textarea></label>
+    <p id="nmsg" class="muted small" role="status"></p>
+    <button class="primary" id="npost" ${list.length >= 3 ? "disabled" : ""}>공지 올리기</button>
+    ${list.length >= 3 ? `<p class="muted small">공지가 3개라 더 올릴 수 없어요. 아래에서 지난 공지를 지워 주세요.</p>` : ""}
+  </section>
+  <section class="card"><h2>올린 공지 <span class="muted small">${list.length}/3</span></h2>
+    ${list.length ? list.map(n => `<div class="row"><span>${esc(n.body)}<span class="intro">${fmtWhen(n.at)}</span></span><button class="link small danger-text" data-del="${n.id}">지우기</button></div>`).join("") : `<p class="muted">아직 올린 공지가 없어요.</p>`}
+  </section>`;
+  $("nbody").addEventListener("input", () => { $("ncount").textContent = `${$("nbody").value.length}/200`; });
+  act("npost", async () => {
+    const r = await Store.postNotice(clubId, $("nbody").value);
+    if (r.error) { $("nmsg").textContent = r.error; return; }
+    render();
+  });
+  el.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", async () => {
+    if (!(await ask("이 공지를 지울까요? 학생 화면에서도 바로 사라져요."))) return;
+    try { await Store.deleteNotice(+b.dataset.del); render(); } catch (err) { handleError(err); }
+  }));
 }
 
 // ---------- 총괄 전용 탭 ----------
